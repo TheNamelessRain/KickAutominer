@@ -457,38 +457,42 @@ namespace KickAutominer.ViewModels
                 string DropName = drop.Title!;
 
                 string jsCode = $@"(() => {{
-                                    const li = [...document.querySelectorAll('main li')]
-                                        .find(el => el.querySelector('img')?.alt === '{DropName}');
-    
-                                    if (!li) return null;
+                                const li = [...document.querySelectorAll('main li')]
+                                    .find(el => el.querySelector('img')?.alt === '{DropName}');
 
-                                    const divs = li.querySelectorAll('div');
+                                if (!li) return null;
 
-                                    const firstSpan = divs[0]?.querySelector('span');
-                                    const firstDiv = divs[0]?.querySelectorAll('div')[1]; 
-                                    let aria = firstDiv?.getAttribute('aria-valuenow');
+                                const divs = li.querySelectorAll('div');
+                                const firstSpan = divs[0]?.querySelector('span');
+                                const firstDiv = divs[0]?.querySelectorAll('div')[1]; 
+                                let aria = firstDiv?.getAttribute('aria-valuenow');
 
-                                    const lastSpan = divs[divs.length - 1]?.querySelector('span');
-                                    let valText = lastSpan?.textContent?.trim() ?? '';
+                                const lastSpan = divs[divs.length - 1]?.querySelector('span');
+                                let valText = lastSpan?.textContent?.trim() ?? '';
+                                const button = li.querySelector('button[aria-label*=""Claim""]');
 
-                                    let value = 0;
-                                    if (valText.toLowerCase().includes('полученные') ||
-                                            valText.toLowerCase().includes('получить'))
-                                        value = 1;
-                                    else if (aria !== null && aria !== '') {{
-                                        aria = aria.replace(',', '.'); 
-                                        value = parseFloat(aria);
-                                        if (isNaN(value)) value = 0;
-                                    }}
-                                    else {{
-                                        valText = valText.replace(',', '.'); 
-                                        value = parseFloat(valText) / 100;
-                                        if (isNaN(value)) value = 0;
-                                    }}
+                                let value = 0;
 
-                                    return value;
-                                }})();
-                                ";
+                                if (button) {{
+                                    value = 1;
+                                    button.click();
+                                }}
+                                else if (valText.toLowerCase().includes('полученные')) {{
+                                    value = 1;
+                                }} 
+                                else if (aria !== null && aria !== '') {{
+                                    aria = aria.replace(',', '.'); 
+                                    value = parseFloat(aria);
+                                    if (isNaN(value)) value = 0;
+                                }}
+                                else {{
+                                    valText = valText.replace(',', '.'); 
+                                    value = parseFloat(valText) / 100;
+                                    if (isNaN(value)) value = 0;
+                                }}
+
+                                return value;
+                            }})();";
 
                 string result = await WebViewCore.ExecuteScriptAsync(jsCode);
 
