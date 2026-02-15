@@ -1,17 +1,16 @@
-﻿using KickAutominer.Commands;
+﻿using KickAutominer.Animations;
+using KickAutominer.Commands;
 using KickAutominer.Models;
 using Microsoft.Web.WebView2.Core;
 using System.Collections.ObjectModel;
-using System.Net;
+using System.IO;
 using System.Net.Http;
-using System.Text.Encodings.Web;
+using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Threading.Channels;
 using System.Windows;
-using System.Windows.Automation.Peers;
 using System.Windows.Input;
-using System.Windows.Media.Media3D;
+using System.Windows.Media.Imaging;
 
 namespace KickAutominer.ViewModels
 {
@@ -54,19 +53,165 @@ namespace KickAutominer.ViewModels
             }
         }
 
+        private string? _selectedtheme;
+        public string? SelectedTheme
+        {
+            get => _selectedtheme;
+            set
+            {
+                Set(ref _selectedtheme, value);
+                ApplyTheme();
+            }
+        }
+
+        private string _loadPicBtnText = "Загрузить картинки";
+        public string LoadPicBtnText
+        {
+            get => _loadPicBtnText;
+            set
+            {
+                _loadPicBtnText = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public ObservableCollection<string> Themes { get; private set; }
         public ObservableCollection<Reward> Rewards { get;  } = [];
+
         public RelayCommand LoadDropsCommand { get; }
         public RelayCommand StartFarmCommand { get; }
+        public RelayCommand loadPicCommand { get; }
 
         private bool _farming;
+        private bool _takeData;
         private CancellationTokenSource? _farmCTS;
+        private bool _webViewHooksInitialized;
+        private bool _loadingPics;
 
         public MainViewModel()
         {
+            Themes = ["White", "Dark"];
+            SelectedTheme = Properties.Settings.Default.SavedTheme;
+            SelectedTheme = "White";
             LoadDropsCommand = new RelayCommand(async _ => await LoadDropsAsync(), CanLoadDrops);
             StartFarmCommand = new RelayCommand(async _ => await StartFarm(), CanStartFarm);
+            loadPicCommand = new RelayCommand(async _ => await loadPic(), CanloadPic);
             //LoadRewards();
         }
+
+        private async Task InitWebViewHooksAsync()
+        {
+            if (_webViewHooksInitialized)
+                return;
+
+            WebViewCore.AddWebResourceRequestedFilter(
+                "*",
+                CoreWebView2WebResourceContext.Image
+            );
+
+            WebViewCore.WebResourceResponseReceived += WebView_ImageLoaded;
+
+            _webViewHooksInitialized = true;
+        }
+
+        private async void WebView_ImageLoaded(
+    object? sender,
+    CoreWebView2WebResourceResponseReceivedEventArgs e)
+        {
+            if (e.Request.Uri.Contains("reward-image"))
+            {
+                try
+                {
+                    using var stream = await e.Response.GetContentAsync();
+
+                    if (stream == null)
+                        return;
+
+                    using var ms = new MemoryStream();
+                    await stream.CopyToAsync(ms);
+                    ms.Position = 0;
+
+                    var bitmap = new BitmapImage();
+                    bitmap.BeginInit();
+                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                    bitmap.StreamSource = ms;
+                    bitmap.DecodePixelWidth = 150;
+                    bitmap.EndInit();
+                    bitmap.Freeze();
+
+                    foreach (Reward rew in Rewards)
+                    {
+                        foreach (var r in rew.Rewards)
+                        {
+                            if (r.ImageUrl == e.Request.Uri)
+                            {
+                                r.Image = bitmap;
+                                break;
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+        }
+
+        private bool CanloadPic(object? parameter) => Rewards.Count > 0 && WebViewCore != null && !_farming;
+        private async Task loadPic()
+        {
+            if (_loadingPics)
+                return;
+
+            _loadingPics = true;
+            using DotAnimation LoadAnimation = new();
+            LoadAnimation.Start(count =>
+            {
+                LoadPicBtnText = "Загрузка картинок" + new string('.', count);
+            });
+
+            await InitWebViewHooksAsync();
+
+            foreach (Reward rew in Rewards)
+            {
+                foreach (var r in rew.Rewards)
+                {
+                    if (r.Image != null)
+                        continue;
+
+                    WebViewCore.Navigate(r.ImageUrl);
+                    await WaitForNavigationAsync();
+                }
+            }
+            WebViewCore.WebResourceResponseReceived -= WebView_ImageLoaded;
+            _webViewHooksInitialized = false;
+
+            WebViewCore!.Navigate("https://kick.com");
+
+            LoadAnimation.Stop();
+            LoadPicBtnText = "Готово";
+            await Task.Delay(1500);
+            LoadPicBtnText = "Загрузить картинки";
+            _loadingPics = false;
+        }
+
+        public void ApplyTheme()
+        {
+            if (string.IsNullOrEmpty(SelectedTheme)) 
+                return;
+
+            Properties.Settings.Default.SavedTheme = SelectedTheme;
+            Properties.Settings.Default.Save();
+
+            var Resources = Application.Current.Resources;
+
+            Resources.MergedDictionaries.Clear();
+
+            var themeDict = new ResourceDictionary
+            {
+                Source = new Uri($"/KickAutominer;component/Themes/{SelectedTheme}.xaml", UriKind.Relative)
+            };
+            Resources.MergedDictionaries.Add(themeDict);
+        }
+
         private void LoadRewards()
         {
             var reward1 = new Reward
@@ -74,12 +219,12 @@ namespace KickAutominer.ViewModels
                 RewarGroupdName = "Group 1",
                 GameName = "Game A",
                 IsSelected = true,
-                Rewards = new List<Drop>
-            {
-                new Drop { Title = "Drop 1", RequiredMinutes = 10, WatchedMinutes = 5 },
+                Rewards =
+            [
+                new Drop { Title = "Drop 1 bla bla lba lba lba lba lba lba lba", RequiredMinutes = 10, WatchedMinutes = 5 },
                 new Drop { Title = "Drop 2", RequiredMinutes = 15, WatchedMinutes = 5 },
                 new Drop { Title = "Drop 3", RequiredMinutes = 20, WatchedMinutes = 5,Proc="15" }
-            }
+            ]
             };
 
             // Второй Reward с 2 дропами
@@ -88,11 +233,11 @@ namespace KickAutominer.ViewModels
                 RewarGroupdName = "Group 2",
                 GameName = "Game B",
                 IsSelected = false,
-                Rewards = new List<Drop>
-            {
+                Rewards =
+            [
                 new Drop { Title = "Drop A", RequiredMinutes = 12, WatchedMinutes = 3 },
                 new Drop { Title = "Drop B", RequiredMinutes = 8,  WatchedMinutes = 7 }
-            }
+            ]
             };
 
             Rewards.Add(reward1);
@@ -107,16 +252,25 @@ namespace KickAutominer.ViewModels
             }
         }
 
-        private void ParseDrops(string json)
+        private async Task ParseDrops(string json)
         {
             using JsonDocument doc = JsonDocument.Parse(json);
 
             if (!doc.RootElement.TryGetProperty("data", out var data))
                 return;
 
-            List<string> AllChannels = [];
             foreach (var campaign in data.EnumerateArray())
             {
+                List<string> AllChannels = [];
+
+                DateTime endDate = campaign.GetProperty("ends_at").GetDateTime();
+                if (endDate <= DateTime.UtcNow)
+                    continue;
+
+                DateTime startdate = campaign.GetProperty("starts_at").GetDateTime();
+                if (startdate.AddHours(3) >= DateTime.Now)
+                    continue;
+
                 Reward Reward = new();
                 Reward.Rewards = [];
 
@@ -161,6 +315,47 @@ namespace KickAutominer.ViewModels
                     } 
                 }
 
+                if (AllChannels.Count == 0)
+                {
+                    WebViewCore!.Navigate($"https://kick.com/category/{Reward.GameName?.ToLower()}/drops");
+
+                    await WaitForNavigationAsync();
+
+                    string jsCode = @"(function() {
+                                                const results = [];
+                                                const divsWithRust = document.querySelectorAll('div:has(a > span)');
+                                                divsWithRust.forEach(div => {
+                                                    const rustSpan = div.querySelector('a > span');
+                                                                if (!rustSpan) return;
+                                                                const text = rustSpan.textContent.trim();
+                                                                if (!text.toLowerCase().includes('" + Reward.GameName?.ToLower() + @"')) return;
+                                                                const links = div.querySelectorAll('a');
+                                                                if (links.length < 2)
+                                                                    return;
+                                                                const secondLink = links[1];
+                                                                const href = secondLink.href;
+                                                                if (!href)
+                                                                    return;
+                                                                if (href.includes('category'))
+                                                                    return;
+
+                                                                const trimmedHref = href.replace('https://kick.com/', '');
+                                                                results.push(trimmedHref);
+                                                            });
+                                                            return results;
+                                                        })();";
+
+                    string ChannelJson = await WebViewCore.ExecuteScriptAsync(jsCode);
+
+                    string[] hrefs = JsonSerializer.Deserialize<string[]>(ChannelJson);
+
+                    if (hrefs != null)
+                        AllChannels.AddRange(hrefs);
+
+                    if (Reward.ChannelUsernames.Count == 0)
+                        Reward.ChannelUsernames = AllChannels;
+                }
+
                 Reward.RewarGroupdName = campaign.TryGetProperty("name", out var rewgrpname) &&
                                     rewgrpname.ValueKind == JsonValueKind.String ? rewgrpname.GetString() : null;
 
@@ -170,18 +365,19 @@ namespace KickAutominer.ViewModels
 
                 Rewards.Add(Reward);
             }
-
-            foreach (Reward reward in Rewards)
-            {
-                if (reward.ChannelUsernames.Count == 0)
-                    reward.ChannelUsernames = AllChannels;
-            }
         }
 
         private bool CanLoadDrops(object? parameter) => WebViewCore != null;
 
         public async Task LoadDropsAsync()
         {
+            using DotAnimation LoadDropsAnimation = new();
+            LoadDropsAnimation.Start(count =>
+            {
+                LoadDropsButton = "Обновление" + new string('.', count);
+            });
+
+            _takeData = true;
             Rewards.Clear();
 
             WebViewCore!.Navigate("https://web.kick.com/api/v1/drops/campaigns");
@@ -194,7 +390,17 @@ namespace KickAutominer.ViewModels
 
             DropsJson = (DropsJson[..^3] + "\"").Trim('"').Replace("\\\"", "\"");
 
-            ParseDrops(DropsJson);
+            await ParseDrops(DropsJson);
+
+            if (Rewards?.Count == 0)
+            {
+                WebViewCore!.Navigate("https://kick.com");
+                MessageBox.Show("Нет активных кампаний");
+                _takeData = false;
+                LoadDropsAnimation.Stop();
+                LoadDropsButton = "Загрузить список дропов";
+                return;
+            }
 
             WebViewCore!.Navigate("https://kick.com/drops/inventory");
 
@@ -261,10 +467,20 @@ namespace KickAutominer.ViewModels
 
             ParseDropsStatus(JsonParseRes);
 
+            LoadDropsAnimation.Stop();
+            LoadDropsButton = "Готово";
+            await Task.Delay(1500);
+
             if (Rewards.Count > 0)
                 LoadDropsButton = "Обновить список дропов";
+            else
+                LoadDropsButton = "Загрузить список дропов";
 
             WebViewCore!.Navigate("https://kick.com");
+
+            CommandManager.InvalidateRequerySuggested();
+
+            _takeData = false;
         }
 
         private void ParseDropsStatus(List<DropStatus> DropStat)
@@ -281,8 +497,7 @@ namespace KickAutominer.ViewModels
             // мб сортировать как то)
         }
 
-        private bool CanStartFarm(object? parameter) => Rewards.Any(d => d.IsSelected);
-
+        private bool CanStartFarm(object? parameter) => Rewards.Any(d => d.IsSelected) && !_takeData;
         private async Task StartFarm()
         {
             if (_farming)
@@ -295,7 +510,12 @@ namespace KickAutominer.ViewModels
             }
 
             _farming = true;
-            FarmStat = "Фарм идёт...";
+            using DotAnimation FarmAnimation = new();
+            FarmAnimation.Start(count =>
+            {
+                FarmStat = "Фарм идёт" + new string('.', count);
+            });
+            
             _farmCTS = new CancellationTokenSource();
             var ct = _farmCTS.Token;
             
@@ -339,6 +559,7 @@ namespace KickAutominer.ViewModels
             finally
             {
                 _farming = false;
+                FarmAnimation.Stop();
                 FarmStat = "Запустить фарм";
                 WebViewCore!.Navigate("https://kick.com");
             }
@@ -407,8 +628,16 @@ namespace KickAutominer.ViewModels
 
                 foreach (var drop in Reward.Rewards)
                 {
-                    drop.WatchedMinutes += elapsed.TotalMinutes;
-                    drop.Proc = (drop.WatchedMinutes * 100.0 / drop.RequiredMinutes).ToString("F2") + "%";
+                    if (drop.WatchedMinutes + elapsed.TotalMinutes >= drop.RequiredMinutes)
+                    {
+                        drop.WatchedMinutes = drop.RequiredMinutes;
+                        drop.Proc = "100%";
+                    }
+                    else
+                    {
+                        drop.WatchedMinutes += elapsed.TotalMinutes;
+                        drop.Proc = (drop.WatchedMinutes * 100.0 / drop.RequiredMinutes).ToString("F2") + "%";
+                    }
                 }
 
                 Application.Current.Dispatcher.Invoke(() => { });

@@ -27,18 +27,28 @@
             <Button Content="{Binding FarmStat}"
                     Width="140" Margin="5"
                     Command="{Binding StartFarmCommand}"/>
+            <Button Content="{Binding LoadPicBtnText}"
+                    Width="160" Margin="5"
+                    Command="{Binding loadPicCommand}"/>
             <CheckBox Content="Выключить звук"
                        Margin="5"
                       IsChecked="{Binding MuteBrowser}"/>
         </StackPanel>
 
-        <ListBox ItemsSource="{Binding Rewards}" Grid.Row="2">
+        <!-- Выбор тем
+        <ComboBox ItemsSource="{Binding Themes,UpdateSourceTrigger=PropertyChanged}" 
+                  HorizontalAlignment="Right" Grid.Row="1" Margin="5" Width="120"
+                  SelectedItem="{Binding SelectedTheme}"/>
+        -->
+
+        <ListBox ItemsSource="{Binding Rewards}" Grid.Row="2" 
+                 SelectionMode="Single">
             <ListBox.ItemTemplate>
                 <DataTemplate>
-                    <StackPanel Margin="0 10">
+                    <StackPanel Margin="0,1">
 
                         <!-- Верхняя строка: Reward -->
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
                             <CheckBox IsChecked="{Binding IsSelected}"
                               VerticalAlignment="Center"
                               Margin="0,0,10,0"/>
@@ -59,27 +69,30 @@
 
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <StackPanel Orientation="Vertical" Margin="10 0" Width="180">
-                                            <Image Source="{Binding Image}" Width="50" Height="50" Margin="0,0,0,5">
-                                                <Image.Style>
-                                                    <Style TargetType="Image">
-                                                        <Setter Property="Visibility" Value="Visible"/>
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding Image}" Value="{x:Null}">
-                                                                <Setter Property="Visibility" Value="Collapsed"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Image.Style>
-                                            </Image>
+                                        <Border Style="{DynamicResource SPDrop}">
+                                            <StackPanel Orientation="Vertical"  Width="180">
+                                                <Image Source="{Binding Image}" Width="150" Height="150" Margin="0,0,0,5">
+                                                    <Image.Style>
+                                                        <Style TargetType="Image">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Image}" Value="{x:Null}">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Image.Style>
+                                                </Image>
+                        
+                                                <TextBlock Text="{Binding Title}" FontWeight="Bold" MinHeight="40"
+                                                           TextAlignment="Center" Margin="0,0,0,5" TextWrapping="Wrap"/>
 
-                                            <TextBlock Text="{Binding Title}" FontWeight="Bold" TextAlignment="Center" Margin="0,0,0,5" TextWrapping="Wrap"/>
-
-                                            <Grid>
-                                                <ProgressBar Minimum="0" Maximum="{Binding RequiredMinutes}" Value="{Binding WatchedMinutes}" Height="20"/>
-                                                <TextBlock Text="{Binding Proc}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="5,0,5,0" FontWeight="Bold"/>
-                                            </Grid>
-                                        </StackPanel>
+                                                <Grid>
+                                                    <ProgressBar Minimum="0" Maximum="{Binding RequiredMinutes}" Value="{Binding WatchedMinutes}" Height="20"/>
+                                                    <TextBlock Text="{Binding Proc}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="5,0,5,0" FontWeight="Bold"/>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
